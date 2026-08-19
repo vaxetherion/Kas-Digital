@@ -5,11 +5,31 @@
 
 -- ── Enums ────────────────────────────────────────────────────────────────────
 
-CREATE TYPE user_role AS ENUM ('admin', 'staff');
-CREATE TYPE transaction_type AS ENUM ('income', 'expense', 'transfer');
-CREATE TYPE transaction_status AS ENUM ('pending', 'confirmed', 'cancelled');
-CREATE TYPE backup_status AS ENUM ('pending', 'completed', 'failed');
-CREATE TYPE attachment_type AS ENUM ('receipt', 'invoice', 'photo', 'document', 'other');
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('admin', 'staff');
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transaction_type') THEN
+    CREATE TYPE transaction_type AS ENUM ('income', 'expense', 'transfer');
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'transaction_status') THEN
+    CREATE TYPE transaction_status AS ENUM ('pending', 'confirmed', 'cancelled');
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'backup_status') THEN
+    CREATE TYPE backup_status AS ENUM ('pending', 'completed', 'failed');
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attachment_type') THEN
+    CREATE TYPE attachment_type AS ENUM ('receipt', 'invoice', 'photo', 'document', 'other');
+  END IF;
+END $$;
 
 -- ── Table: users ─────────────────────────────────────────────────────────────
 
