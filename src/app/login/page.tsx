@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { Suspense } from "react";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/";
   const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
 
   const [email, setEmail] = useState("");
@@ -22,12 +25,12 @@ export default function LoginPage() {
     // Check if already logged in
     client.auth.getSession().then((res: { data: { session: { user: unknown } | null } }) => {
       if (res.data.session) {
-        router.replace("/");
+        router.replace(redirectTo);
       } else {
         setCheckingSession(false);
       }
     });
-  }, [router]);
+  }, [router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +58,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace("/");
+    router.replace(redirectTo);
   };
 
   const handleMagicLink = async () => {
@@ -70,7 +73,7 @@ export default function LoginPage() {
     const { error: magicError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `${window.location.origin}${redirectTo}`,
       },
     });
 
@@ -191,5 +194,20 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50">
+        <svg className="animate-spin h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

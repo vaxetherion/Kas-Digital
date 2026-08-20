@@ -12,7 +12,7 @@ export async function updateSession(request: NextRequest) {
   // Guard: if env vars are missing, skip session refresh (avoids crash on deploy)
   if (!supabaseUrl || !supabaseAnonKey) {
     console.warn("[middleware] Supabase env vars missing, skipping session refresh");
-    return supabaseResponse;
+    return { supabaseResponse, user: null };
   }
 
   const supabase = createServerClient(
@@ -38,8 +38,8 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Refresh the session — do NOT remove this. It's used by Supabase Auth.
-  await supabase.auth.getUser();
+  // Refresh the session — do NOT remove this. It's used for Supabase Auth.
+  const { data: { user } } = await supabase.auth.getUser();
 
-  return supabaseResponse;
+  return { supabaseResponse, user };
 }

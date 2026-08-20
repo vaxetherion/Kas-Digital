@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { TopBar } from "@/components/layout/top-bar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatRupiah, formatDate, cn } from "@/lib/utils";
-import type { Transaction, Category, TransactionType } from "@/types/database";
+import type { Transaction, Category, TransactionType, Wallet } from "@/types/database";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,7 @@ type TransactionRow = Transaction & {
 
 type Filters = {
   type: FilterType;
+  walletId: string;
   search: string;
   dateFrom: string;
   dateTo: string;
@@ -42,8 +43,10 @@ export default function TransactionsPage() {
   const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<TransactionRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
   const [filters, setFilters] = useState<Filters>({
     type: "all",
+    walletId: "all",
     search: "",
     dateFrom: "",
     dateTo: "",
@@ -56,6 +59,19 @@ export default function TransactionsPage() {
     const client = createClient();
     setSupabase(client);
   }, []);
+
+  // ── Fetch wallets for filter ────────────────────────────────────────
+  useEffect(() => {
+    if (!supabase) return;
+    supabase
+      .from("wallets")
+      .select("id, name, icon, color")
+      .eq("is_active", true)
+      .order("sort_order")
+      .then((res: { data: Wallet[] | null }) => {
+        setWallets((res.data as Wallet[]) ?? []);
+      });
+  }, [supabase]);
 
   // ── Fetch transactions ────────────────────────────────────────────────
   const fetchTransactions = useCallback(async () => {
@@ -82,6 +98,11 @@ export default function TransactionsPage() {
       const endDate = new Date(filters.dateTo);
       endDate.setDate(endDate.getDate() + 1);
       query = query.lt("transaction_date", endDate.toISOString());
+    }
+
+    // Filter by wallet
+    if (filters.walletId !== "all") {
+      query = query.eq("wallet_id", filters.walletId);
     }
 
     // Search in description
@@ -111,7 +132,7 @@ export default function TransactionsPage() {
   // ── Reset page on filter change ──────────────────────────────────────
   useEffect(() => {
     setPage(0);
-  }, [filters.type, filters.search, filters.dateFrom, filters.dateTo]);
+  }, [filters.type, filters.walletId, filters.search, filters.dateFrom, filters.dateTo]);
 
   // ── Search debounce ──────────────────────────────────────────────────
   const handleSearch = useCallback((value: string) => {
@@ -218,6 +239,27 @@ export default function TransactionsPage() {
               className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
             />
           </div>
+
+          {/* Wallet filter */}
+          {wallets.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Wallet
+              </label>
+              <select
+                value={filters.walletId}
+                onChange={(e) => setFilters((prev) => ({ ...prev, walletId: e.target.value }))}
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              >
+                <option value="all">Semua Wallet</option>
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.icon ?? "💵"} {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Date range */}
           <div className="flex flex-col sm:flex-row gap-3">

@@ -6,12 +6,13 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { TopBar } from "@/components/layout/top-bar";
 import { ChevronRightIcon } from "@/components/ui/icons";
-import type { Category, TransactionType } from "@/types/database";
+import type { Category, TransactionType, Wallet } from "@/types/database";
 
 type FormState = {
   type: TransactionType;
   amount: string;
   category_id: string;
+  wallet_id: string;
   description: string;
   reference: string;
   notes: string;
@@ -22,10 +23,18 @@ const INITIAL_STATE: FormState = {
   type: "expense",
   amount: "",
   category_id: "",
+  wallet_id: "",
   description: "",
   reference: "",
   notes: "",
   transaction_date: new Date().toISOString().split("T")[0],
+};
+
+type ScanData = {
+  description?: string;
+  amount?: number;
+  date?: string;
+  notes?: string;
 };
 
 export default function NewTransactionPage() {
@@ -34,9 +43,11 @@ export default function NewTransactionPage() {
 
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [fromScan, setFromScan] = useState(false);
 
   // ── Initialize Supabase client on mount (browser only) ────────────────
   useEffect(() => {
@@ -58,6 +69,50 @@ export default function NewTransactionPage() {
     })();
     return () => { cancelled = true; };
   }, [supabase]);
+
+  // ── Fetch wallets ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true });
+      if (!cancelled && data) {
+        setWallets(data as Wallet[]);
+        // Auto-select first wallet if none selected
+        if (!form.wallet_id && data.length > 0) {
+          setForm((prev) => ({ ...prev, wallet_id: data[0].id }));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [supabase, form.wallet_id]);
+
+  // ── Auto-fill from scan receipt ──────────────────────────────────────
+  useEffect(() => {
+    const scanRaw = sessionStorage.getItem("scan-receipt-data");
+    if (!scanRaw) return;
+
+    try {
+      const scanData: ScanData = JSON.parse(scanRaw);
+      sessionStorage.removeItem("scan-receipt-data");
+
+      setForm((prev) => ({
+        ...prev,
+        description: scanData.description || prev.description,
+        amount: scanData.amount ? String(scanData.amount) : prev.amount,
+        transaction_date: scanData.date || prev.transaction_date,
+        notes: scanData.notes || prev.notes,
+        type: "expense",
+      }));
+      setFromScan(true);
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
 
   // ── Helpers ─────────────────────────────────────────────────────────────
   const formatAmountInput = (raw: string): string => {
@@ -113,6 +168,7 @@ export default function NewTransactionPage() {
         type: form.type,
         amount,
         category_id: form.category_id || null,
+        wallet_id: form.wallet_id || null,
         description: form.description.trim(),
         reference: form.reference.trim() || null,
         notes: form.notes.trim() || null,
@@ -168,6 +224,23 @@ export default function NewTransactionPage() {
             Catat pemasukan atau pengeluaran baru.
           </p>
         </div>
+
+        {/* Scan receipt notification */}
+        {fromScan && (
+          <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm text-blue-700 flex items-center gap-2">
+            <span>📸</span>
+            <span>Data diisi otomatis dari scan struk. Silakan periksa dan lengkapi.</span>
+            <button
+              onClick={() => {
+                setFromScan(false);
+                setForm(INITIAL_STATE);
+              }}
+              className="ml-auto text-xs font-medium text-blue-600 hover:underline"
+            >
+              Reset
+            </button>
+          </div>
+        )}
 
         {/* Success toast */}
         {success && (
@@ -237,8 +310,27 @@ export default function NewTransactionPage() {
             </div>
           </div>
 
-          {/* ── Category & Date row ─────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ── Wallet, Category & Date ──────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Wallet */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4 lg:p-6">
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                💳 Wallet
+              </label>
+              <select
+                value={form.wallet_id}
+                onChange={(e) => handleChange("wallet_id", e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              >
+                <option value="">Pilih wallet...</option>
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.icon ?? "💵"} {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Category */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 lg:p-6">
               <label className="block text-sm font-semibold text-gray-900 mb-3">
@@ -323,7 +415,7 @@ export default function NewTransactionPage() {
                 Ringkasan
               </p>
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       isIncome
@@ -333,6 +425,12 @@ export default function NewTransactionPage() {
                   >
                     {isIncome ? "Pemasukan" : "Pengeluaran"}
                   </span>
+                  {form.wallet_id && (
+                    <span className="text-xs text-gray-500">
+                      {wallets.find((w) => w.id === form.wallet_id)?.icon ?? "💵"}{" "}
+                      {wallets.find((w) => w.id === form.wallet_id)?.name ?? ""}
+                    </span>
+                  )}
                 </div>
                 <p className={`text-xl font-bold ${isIncome ? "text-emerald-600" : "text-red-600"}`}>
                   {isIncome ? "+" : "-"} Rp {amountDisplay}

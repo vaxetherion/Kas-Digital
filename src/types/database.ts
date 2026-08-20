@@ -26,6 +26,7 @@ export type AttachmentType =
   | "photo"
   | "document"
   | "other";
+export type WalletType = "cash" | "bank" | "ewallet" | "other";
 
 // ---------------------------------------------------------------------------
 // Table: users
@@ -61,6 +62,24 @@ export interface Category {
 }
 
 // ---------------------------------------------------------------------------
+// Table: wallets
+// ---------------------------------------------------------------------------
+
+export interface Wallet {
+  id: string;
+  user_id: string;
+  name: string;
+  type: WalletType;
+  icon: string | null;
+  color: string | null;
+  balance: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Table: transactions
 // ---------------------------------------------------------------------------
 
@@ -68,6 +87,8 @@ export interface Transaction {
   id: string;
   user_id: string;
   category_id: string | null;
+  wallet_id: string | null;
+  to_wallet_id: string | null;
   type: TransactionType;
   status: TransactionStatus;
   amount: number;
@@ -152,6 +173,14 @@ export interface Database {
         };
         Update: Partial<Omit<Category, "id" | "created_at">>;
       };
+      wallets: {
+        Row: Wallet;
+        Insert: Omit<Wallet, "created_at" | "updated_at"> & {
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Wallet, "id" | "created_at">>;
+      };
       transactions: {
         Row: Transaction;
         Insert: Omit<Transaction, "created_at" | "updated_at"> & {
@@ -181,6 +210,14 @@ export interface Database {
         };
         Update: Partial<Omit<Attachment, "id" | "created_at">>;
       };
+      budget_limits: {
+        Row: BudgetLimit;
+        Insert: Omit<BudgetLimit, "created_at" | "updated_at"> & {
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<BudgetLimit, "id" | "created_at">>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -190,6 +227,22 @@ export interface Database {
       transaction_status: TransactionStatus;
       backup_status: BackupStatus;
       attachment_type: AttachmentType;
+      wallet_type: WalletType;
     };
   };
+}
+
+// ---------------------------------------------------------------------------
+// Table: budget_limits
+// ---------------------------------------------------------------------------
+
+export interface BudgetLimit {
+  id: string;
+  user_id: string;
+  category_id: string;
+  monthly_limit: number;
+  alert_threshold: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }

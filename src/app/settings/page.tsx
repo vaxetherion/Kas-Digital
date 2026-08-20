@@ -9,6 +9,12 @@ const settingMenus = [
     description: "Kelola informasi profil akun kamu.",
   },
   {
+    href: "/settings/budget",
+    icon: "📊",
+    title: "Budget Anggaran",
+    description: "Tetapkan batas pengeluaran per kategori per bulan.",
+  },
+  {
     href: "/settings/notifications",
     icon: "🔔",
     title: "Notifikasi",

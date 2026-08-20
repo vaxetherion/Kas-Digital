@@ -1,6 +1,7 @@
 -- =============================================================================
 -- MIMO 2.5 Kas Digital — Initial Schema
 -- Run this migration in Supabase SQL Editor or via `supabase db push`
+-- Safe to re-run (uses IF NOT EXISTS)
 -- =============================================================================
 
 -- ── Enums ────────────────────────────────────────────────────────────────────
@@ -33,7 +34,7 @@ END $$;
 
 -- ── Table: users ─────────────────────────────────────────────────────────────
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   telegram_id     BIGINT UNIQUE,
   telegram_username TEXT,
@@ -50,7 +51,7 @@ COMMENT ON TABLE users IS 'Pengguna sistem, termasuk yang terhubung via Telegram
 
 -- ── Table: categories ────────────────────────────────────────────────────────
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT NOT NULL UNIQUE,
   description     TEXT,
@@ -64,18 +65,21 @@ CREATE TABLE categories (
 
 COMMENT ON TABLE categories IS 'Kategori untuk mengelompokkan transaksi';
 
--- Seed default categories
-INSERT INTO categories (name, description, icon, color, sort_order) VALUES
+-- Seed default categories (only if empty)
+INSERT INTO categories (name, description, icon, color, sort_order)
+SELECT * FROM (VALUES
   ('Makan & Minum',      'Pengeluaran untuk makanan dan minuman',  '🍽️', '#ef4444', 1),
   ('Transportasi',       'Biaya transportasi dan perjalanan',      '🚗', '#f59e0b', 2),
   ('Belanja',            'Pembelian barang dan kebutuhan',         '🛒', '#8b5cf6', 3),
   ('Gaji & Bonus',       'Pemasukan dari gaji atau bonus',        '💰', '#10b981', 4),
   ('Operasional',        'Biaya operasional usaha',               '⚙️', '#6b7280', 5),
-  ('Pemasukan Lainnya',  'Sumber pemasukan lain',                 '📈', '#06b6d4', 6);
+  ('Pemasukan Lainnya',  'Sumber pemasukan lain',                 '📈', '#06b6d4', 6)
+) AS v(name, description, icon, color, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM categories LIMIT 1);
 
 -- ── Table: transactions ──────────────────────────────────────────────────────
 
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   category_id         UUID REFERENCES categories(id) ON DELETE SET NULL,
@@ -92,14 +96,14 @@ CREATE TABLE transactions (
 
 COMMENT ON TABLE transactions IS 'Semua transaksi kas digital (pemasukan, pengeluaran, transfer)';
 
-CREATE INDEX idx_transactions_user_id ON transactions(user_id);
-CREATE INDEX idx_transactions_category_id ON transactions(category_id);
-CREATE INDEX idx_transactions_date ON transactions(transaction_date DESC);
-CREATE INDEX idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
 
 -- ── Table: telegram_links ────────────────────────────────────────────────────
 
-CREATE TABLE telegram_links (
+CREATE TABLE IF NOT EXISTS telegram_links (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id               UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   telegram_id           BIGINT NOT NULL UNIQUE,
@@ -115,7 +119,7 @@ COMMENT ON TABLE telegram_links IS 'Pemetaan akun Telegram ke pengguna sistem';
 
 -- ── Table: backups ───────────────────────────────────────────────────────────
 
-CREATE TABLE backups (
+CREATE TABLE IF NOT EXISTS backups (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   filename        TEXT NOT NULL,
@@ -132,7 +136,7 @@ COMMENT ON TABLE backups IS 'Riwayat backup data kas digital';
 
 -- ── Table: attachments ───────────────────────────────────────────────────────
 
-CREATE TABLE attachments (
+CREATE TABLE IF NOT EXISTS attachments (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   transaction_id      UUID NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -147,7 +151,7 @@ CREATE TABLE attachments (
 
 COMMENT ON TABLE attachments IS 'Lampiran terkait transaksi (bukti, foto, dll)';
 
-CREATE INDEX idx_attachments_transaction_id ON attachments(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_transaction_id ON attachments(transaction_id);
 
 -- ── Trigger: auto-update updated_at ──────────────────────────────────────────
 
@@ -158,6 +162,11 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop existing triggers first (ignore errors)
+DROP TRIGGER IF EXISTS set_updated_at_users ON users;
+DROP TRIGGER IF EXISTS set_updated_at_categories ON categories;
+DROP TRIGGER IF EXISTS set_updated_at_transactions ON transactions;
 
 CREATE TRIGGER set_updated_at_users
   BEFORE UPDATE ON users
@@ -175,12 +184,45 @@ CREATE TRIGGER set_updated_at_transactions
 -- Row Level Security (RLS) Policies
 -- =============================================================================
 
+-- Enable RLS (safe to re-run)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE backups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies first (ignore errors)
+DROP POLICY IF EXISTS "Users can read own profile" ON users;
+DROP POLICY IF EXISTS "Users can update own profile" ON users;
+DROP POLICY IF EXISTS "Users can insert own profile" ON users;
+DROP POLICY IF EXISTS "Admin can read all users" ON users;
+DROP POLICY IF EXISTS "Admin can manage all users" ON users;
+
+DROP POLICY IF EXISTS "Anyone authenticated can read active categories" ON categories;
+DROP POLICY IF EXISTS "Admin can manage categories" ON categories;
+
+DROP POLICY IF EXISTS "Users can read own transactions" ON transactions;
+DROP POLICY IF EXISTS "Users can insert own transactions" ON transactions;
+DROP POLICY IF EXISTS "Users can update own transactions" ON transactions;
+DROP POLICY IF EXISTS "Users can delete own transactions" ON transactions;
+DROP POLICY IF EXISTS "Admin can read all transactions" ON transactions;
+DROP POLICY IF EXISTS "Admin can manage all transactions" ON transactions;
+
+DROP POLICY IF EXISTS "Users can read own telegram links" ON telegram_links;
+DROP POLICY IF EXISTS "Users can insert own telegram links" ON telegram_links;
+DROP POLICY IF EXISTS "Users can update own telegram links" ON telegram_links;
+DROP POLICY IF EXISTS "Admin can manage all telegram links" ON telegram_links;
+
+DROP POLICY IF EXISTS "Users can read own backups" ON backups;
+DROP POLICY IF EXISTS "Users can create own backups" ON backups;
+DROP POLICY IF EXISTS "Admin can manage all backups" ON backups;
+
+DROP POLICY IF EXISTS "Users can read own attachments" ON attachments;
+DROP POLICY IF EXISTS "Users can read attachments of own transactions" ON attachments;
+DROP POLICY IF EXISTS "Users can insert own attachments" ON attachments;
+DROP POLICY IF EXISTS "Users can delete own attachments" ON attachments;
+DROP POLICY IF EXISTS "Admin can manage all attachments" ON attachments;
 
 -- ── users ────────────────────────────────────────────────────────────────────
 
